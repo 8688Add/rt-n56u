@@ -225,6 +225,8 @@ struct nvram_pair router_defaults[] = {
 	{ "wl_HT_BAWinSize", "64" },
 	{ "wl_HT_AutoBA", "1" },
 	{ "wl_VgaClamp", "0" },
+	{ "wl_KickStaRssiLow", "0" },
+	{ "wl_AssocReqRssiThres", "0" },
 
 	// guest AP 5Ghz
 	{ "wl_guest_enable", "0" },
@@ -321,6 +323,8 @@ struct nvram_pair router_defaults[] = {
 	{ "rt_HT_BAWinSize", "64" },
 	{ "rt_HT_AutoBA", "1" },
 	{ "rt_VgaClamp", "0" },
+	{ "rt_KickStaRssiLow", "0" },
+	{ "rt_AssocReqRssiThres", "0" },
 
 	// guest AP 2.4Ghz
 	{ "rt_guest_enable", "0" },
@@ -659,6 +663,18 @@ struct nvram_pair router_defaults[] = {
 	{ "v2_http2_host", "" },
 	{ "v2_http2_path", "" },
 	{ "v2_tls", "0" },
+	
+	/*caddy*/
+	{ "caddy_enable", "0" },
+	{ "caddy_file", "0" },
+	{ "caddy_wan", "0" },
+	{ "caddy_storage", "-1" },
+	{ "caddy_dir", "/tmp" },
+	{ "caddyf_wan_port", "19998" },
+	{ "caddyw_wan_port", "19999" },
+	{ "caddy_wip6", "0" },
+	{ "caddy_wname", "admin" },
+	{ "caddy_wpassword", "admin" },
 	
 	/*frp*/
 	{ "frpc_enable", "0" },
