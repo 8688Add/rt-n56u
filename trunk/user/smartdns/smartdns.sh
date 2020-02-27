@@ -37,7 +37,7 @@ ss_black=`nvram get ss_black`
 
 check_ss(){
 if [ $(nvram get ss_enable) = 1 ] && [ $(nvram get ss_run_mode) = "router" ] && [ $(nvram get pdnsd_enable) = 0 ]; then
-logger -t "SmartDNS" "系统检测到SS模式为绕过大陆模式，并且启用了pdnsd,请先调整SS解析使用自定义模式！程序将退出。"
+logger -t "SmartDNS" "系统检测到SS模式为绕过大陆模式，并且启用了pdnsd,请先调整SS解析使用SmartDNS+手动配置模式！程序将退出。"
 nvram set sdns_enable=0
 exit 0
 fi
@@ -101,34 +101,55 @@ sdnss_ip=`nvram get sdnss_ip_x$j`
 sdnss_port=`nvram get sdnss_port_x$j`
 sdnss_type=`nvram get sdnss_type_x$j`
 sdnss_ipc=`nvram get sdnss_ipc_x$j`
+sdnss_named=`nvram get sdnss_named_x$j`
+sdnss_non=`nvram get sdnss_non_x$j`
+sdnss_ipset=`nvram get sdnss_ipset_x$j`
 ipc=""
+named=""
+non=""
+sipset=""
 if [ $sdnss_ipc = "whitelist" ]; then
 ipc="-whitelist-ip"
 elif [ $sdnss_ipc = "blacklist" ]; then
 ipc="-blacklist-ip"
 fi
+if [ $sdnss_named != "" ]; then
+named="-group $sdnss_named"
+fi
+if [ $sdnss_non = "1" ]; then
+non="-exclude-default-group"
+fi
 if [ $sdnss_type = "tcp" ]; then
 if [ $sdnss_port = "default" ]; then
-echo "server-tcp $sdnss_ip $ipc" >> $SMARTDNS_CONF
+echo "server-tcp $sdnss_ip $ipc $named $non" >> $SMARTDNS_CONF
 else
-echo "server-tcp $sdnss_ip:$sdnss_port $ipc" >> $SMARTDNS_CONF
+echo "server-tcp $sdnss_ip:$sdnss_port $ipc $named $non" >> $SMARTDNS_CONF
 fi
 elif [ $sdnss_type = "udp" ]; then
 if [ $sdnss_port = "default" ]; then
 echo "server $sdnss_ip" >> $SMARTDNS_CONF
 else
-echo "server $sdnss_ip:$sdnss_port $ipc" >> $SMARTDNS_CONF
+echo "server $sdnss_ip:$sdnss_port $ipc $named $non" >> $SMARTDNS_CONF
 fi
 elif [ $sdnss_type = "tls" ]; then
 if [ $sdnss_port = "default" ]; then
-echo "server-tls $sdnss_ip $ipc" >> $SMARTDNS_CONF
+echo "server-tls $sdnss_ip $ipc $named $non" >> $SMARTDNS_CONF
 else
-echo "server-tls $sdnss_ip:$sdnss_port $ipc" >> $SMARTDNS_CONF
+echo "server-tls $sdnss_ip:$sdnss_port $ipc $named $non" >> $SMARTDNS_CONF
 fi
 elif [ $sdnss_type = "https" ]; then
 if [ $sdnss_port = "default" ]; then
-echo "server-https $sdnss_ip $ipc" >> $SMARTDNS_CONF
+echo "server-https $sdnss_ip $ipc $named $non" >> $SMARTDNS_CONF
 fi	
+fi
+if [ $sdnss_ipset != "" ]; then
+#ipset add gfwlist $sdnss_ipset 2>/dev/null
+CheckIPAddr $sdnss_ipset
+if [ "$?" == "1" ];then
+echo "ipset /$sdnss_ipset/smartdns" >> $SMARTDNS_CONF
+else
+ipset add smartdns $sdnss_ipset 2>/dev/null
+fi
 fi	
 fi
 done
@@ -180,7 +201,7 @@ if [ "$sdnse_address" = "1" ]; then
 		ADDR=""
 	fi
 echo "bind" "$ADDR:$sdnse_port $ARGS" >> $SMARTDNS_CONF
-	if [ "$sdnse_tcp" = "0" ]; then
+	if [ "$sdnse_tcp" = "1" ]; then
 		echo "bind-tcp" "$ADDR:$sdnse_port$ARGS" >> $SMARTDNS_CONF
 	fi
 fi
@@ -269,17 +290,20 @@ chmod -R 777 $smartdns_file
 fi
 }
 start_smartdns(){
+rm -f /tmp/sdnsipset.conf
+
 if [ ! -f "$smartdns_file" ];then
 dl_smartdns
 fi
 args=""
 logger -t "SmartDNS" "创建配置文件."
+ipset -N smartdns hash:net 2>/dev/null
 gensmartconf
 
-grep -v ^! $ADDRESS_CONF >> $SMARTDNS_CONF
-grep -v ^! $BLACKLIST_IP_CONF >> $SMARTDNS_CONF
-grep -v ^! $WHITELIST_IP_CONF >> $SMARTDNS_CONF
-grep -v ^! $CUSTOM_CONF >> $SMARTDNS_CONF
+grep -v '^#' $ADDRESS_CONF | grep -v "^$" >> $SMARTDNS_CONF
+grep -v '^#' $BLACKLIST_IP_CONF | grep -v "^$" >> $SMARTDNS_CONF
+grep -v '^#' $WHITELIST_IP_CONF | grep -v "^$" >> $SMARTDNS_CONF
+grep -v '^#' $CUSTOM_CONF | grep -v "^$" >> $SMARTDNS_CONF
 #grep -v ^! /tmp/whitelist.txt >> $SMARTDNS_CONF
 #rm -f /tmp/whitelist.txt
 #grep -v ^! /tmp/blacklist.txt >> $SMARTDNS_CONF
@@ -301,9 +325,39 @@ if [ $snds_redirect = "2" ]; then
 
 }
 
-stop_smartdns(){
+CheckIPAddr()
+{
+echo $1|grep "^[0-9]\{1,3\}\.\([0-9]\{1,3\}\.\)\{2\}[0-9]\{1,3\}$" > /dev/null;
+#IP地址必须为全数字
+        if [ $? -ne 0 ]
+        then
+                return 1
+        fi
+        ipaddr=$1
+        a=`echo $ipaddr|awk -F . '{print $1}'`  #以"."分隔，取出每个列的值
+        b=`echo $ipaddr|awk -F . '{print $2}'`
+        c=`echo $ipaddr|awk -F . '{print $3}'`
+        d=`echo $ipaddr|awk -F . '{print $4}'`
+        for num in $a $b $c $d
+        do
+                if [ $num -gt 255 ] || [ $num -lt 0 ]    #每个数值必须在0-255之间
+                then
+                        return 1
+                fi
+        done
+                return 0
+}
 
-killall -9 smartdns
+stop_smartdns(){
+rm -f /tmp/whitelist.conf
+rm -f /tmp/blacklist.conf
+smartdns_process=`pidof smartdns`
+if [ -n "$smartdns_process" ];then 
+	logger -t "SS" "关闭smartdns进程..."
+	killall smartdns >/dev/null 2>&1
+	kill -9 "$smartdns_process" >/dev/null 2>&1
+fi
+ipset -X smartdns 2>/dev/null
 del_dns
 clear_iptable $sdns_port $sdns_ipv6_server
 if [ "$snds_redirect" = "2" ]; then
