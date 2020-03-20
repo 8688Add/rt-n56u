@@ -156,6 +156,7 @@ start_rules() {
 		socks="-o"
 	elif [ "$run_mode" = "router" ]; then
 		gfwmode="-r"
+		socks="-o"
 	elif [ "$run_mode" = "oversea" ]; then
 		gfwmode="-c"
 	elif [ "$run_mode" = "all" ]; then
